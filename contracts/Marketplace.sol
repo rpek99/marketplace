@@ -3,17 +3,20 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "hardhat/console.sol";
 
 contract Marketplace {
     struct Listing {
         uint256 listingId;
         uint256 price;
-        address owner;
+        address payable owner;
         address assetContract;
         uint256 tokenId;
     }
 
     using Counters for Counters.Counter;
+    using SafeMath for uint256;
 
     address payable private owner;
     address payable private _governmentAccount;
@@ -40,7 +43,7 @@ contract Marketplace {
         listings[newListingId] = Listing(
             newListingId,
             price,
-            msg.sender,
+            payable(msg.sender),
             assetContract,
             tokenId
         );
@@ -50,8 +53,44 @@ contract Marketplace {
 
     //TODO
     //function cancelListing() {}
-    //function buy() {}
     //function updateListing() {} maybe
+
+    function buy(uint256 listingId) external payable {
+        require(msg.sender != address(0), "Address should not be 0");
+
+        Listing memory listing = listings[listingId];
+        uint256 marketplaceCommissionCalculated = listing
+            .price
+            .mul(marketplaceCommission)
+            .div(100);
+        uint256 governmentCommissionCalculated = listing
+            .price
+            .mul(governmentCommission)
+            .div(100);
+        uint256 requiredAmount = listing
+            .price
+            .add(marketplaceCommissionCalculated)
+            .add(governmentCommissionCalculated);
+
+        require(msg.value == requiredAmount, "Insufficent amount");
+
+        //Commissions are paid
+        _governmentAccount.transfer(governmentCommissionCalculated.mul(2));
+
+        //Buyer pays marketplace commission
+        owner.transfer(marketplaceCommissionCalculated);
+
+        //Send money to the seller
+        listing.owner.transfer(
+            listing.price.sub(governmentCommissionCalculated)
+        );
+
+        IERC721(listing.assetContract).transferFrom(
+            address(this),
+            msg.sender,
+            listing.tokenId
+        );
+    }
 
     function getListings() external view returns (Listing[] memory) {
         Listing[] memory activeListings = new Listing[](
