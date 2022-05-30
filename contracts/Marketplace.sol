@@ -4,20 +4,15 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "hardhat/console.sol";
 
-contract Marketplace {
-    struct Listing {
-        uint256 listingId;
-        uint256 price;
-        address payable owner;
-        address assetContract;
-        uint256 tokenId;
-    }
-
-    using Counters for Counters.Counter;
+contract Marketplace is ReentrancyGuard {
     using SafeMath for uint256;
-
+    using Counters for Counters.Counter;
+    Counters.Counter private _totalListings; //Starts from 1
+    Counters.Counter private _listingSold;  //Starts from 1
+    
     address payable private owner;
     address payable private _governmentAccount;
 
@@ -25,37 +20,49 @@ contract Marketplace {
     uint64 public marketplaceCommission = 1;
 
     mapping(uint256 => Listing) public listings;
-    Counters.Counter private totalListings;
-
+    
     constructor(address governmentAccount) {
         owner = payable(msg.sender);
         _governmentAccount = payable(governmentAccount);
     }
+
     //create new listing
     function createListing(
         address assetContract,
         uint256 tokenId,
         uint256 price
-    ) external {
-        totalListings.increment();
-        uint256 newListingId = totalListings.current();
+    ) external nonReentrant{
+        _totalListings.increment();
+        uint256 newListingId = _totalListings.current();
 
         listings[newListingId] = Listing(
             newListingId,
             price,
             payable(msg.sender),
+            payable(address(0)),
             assetContract,
             tokenId
         );
 
         IERC721(assetContract).transferFrom(msg.sender, address(this), tokenId);
+
+        emit ListingCreated(
+            newListingId,
+            tokenId, 
+            assetContract, 
+            price, 
+            msg.sender,
+            address(0)
+        );
     }
 
     // buy/sell listing
-    function buy(uint256 listingId) external payable {
+    function buy(uint256 listingId) external payable nonReentrant{
         require(msg.sender != address(0), "Address should not be 0");
 
         Listing memory listing = listings[listingId];
+        require(listing.listingId == listingId, "Property does not exist");
+        
         uint256 marketplaceCommissionCalculated = listing
             .price
             .mul(marketplaceCommission)
@@ -78,7 +85,7 @@ contract Marketplace {
         owner.transfer(marketplaceCommissionCalculated);
 
         //Send money to the seller
-        listing.owner.transfer(
+        listing.seller.transfer(
             listing.price.sub(governmentCommissionCalculated)
         );
 
@@ -87,42 +94,76 @@ contract Marketplace {
             msg.sender,
             listing.tokenId
         );
+
+        _listingSold.increment();
+
+        emit ListingSold(
+            listingId, 
+            listing.tokenId, 
+            listing.assetContract, 
+            listing.price, 
+            listing.seller,
+            msg.sender
+        );
     }
 
     // get all listings
-    function getListings() external view returns (Listing[] memory) {
-        Listing[] memory activeListings = new Listing[](
-            totalListings.current()
-        );
+    function getAllListings() external view returns (Listing[] memory) {
+        uint256 unsoldListingCount = _totalListings.current() - _listingSold.current();
+        Listing[] memory activeListings = new Listing[](unsoldListingCount);
 
-        for (uint256 i = 0; i < totalListings.current(); i++) {
-            activeListings[i] = listings[i + 1];
+        uint256 index = 0;
+
+        for (uint256 i = 0; i < unsoldListingCount; i++) {
+            if (listings[i + 1].owner == address(0)) {
+                activeListings[index] = listings[listings[i + 1].listingId];
+                index += 1;
+            }
         }
-
         return activeListings;
     }
 
-    //get individual listings
+    //return listings of specific user
     function getMyListings() public view returns (Listing[] memory) {
-        uint256 totalListingCount = totalListings.current();
-        uint256 listingCount = 0;
-        uint256 currentIndex = 0;
+        uint256 totalListingCount = _totalListings.current();
+        uint256 itemCount = 0;
+        uint256 index = 0;
 
-        for (uint i = 0; i < totalListingCount; i++) {
+        for (uint256 i = 0; i < totalListingCount; i++) {
             if (listings[i + 1].owner == msg.sender) {
-                listingCount += 1;
+                itemCount += 1;
             }
         } 
-        Listing[] memory items = new Listing[](listingCount);
-        for (uint i = 0; i < totalListingCount; i++) {
+        Listing[] memory items = new Listing[](itemCount);
+        for (uint256 i = 0; i < totalListingCount; i++) {
             if (listings[i + 1].owner == msg.sender) {
-                uint currentId = i + 1;
-                Listing storage currentListing = listings[currentId];
-                items[currentIndex] = currentListing;
-                currentIndex += 1;
+                uint256 currentId = i + 1;
+                items[index] = listings[currentId];
+                index += 1;
             }
         }
+        return items;
+    }
 
+    //return listings created by a specific user
+    function getListingsCreated() public view returns (Listing[] memory) {
+        uint256 totalListingCount = _totalListings.current();
+        uint256 itemCount = 0;
+        uint256 index = 0;
+
+        for (uint256 i = 0; i < totalListingCount; i++) {
+            if (listings[i + 1].seller == msg.sender) {
+                itemCount += 1;
+            }
+        } 
+        Listing[] memory items = new Listing[](itemCount);
+        for (uint256 i = 0; i < totalListingCount; i++) {
+            if (listings[i + 1].seller == msg.sender) {
+                uint256 currentId = i + 1;
+                items[index] = listings[currentId];
+                index += 1;
+            }
+        }
         return items;
     }
 
@@ -135,4 +176,34 @@ contract Marketplace {
     //function updateListing() {} maybe
     //function removeListing() {} maybe
     //function addListing() {} maybe
+
+    //structs
+    struct Listing {
+        uint256 listingId;
+        uint256 price;
+        address payable seller;
+        address payable owner;
+        address assetContract;
+        uint256 tokenId;
+    }
+
+
+    //events
+    event ListingCreated(
+        uint256 indexed listingId,
+        uint256 indexed tokenId,
+        address indexed assetContract,
+        uint256 price,
+        address seller,
+        address owner
+    );
+
+    event ListingSold(
+        uint256 indexed listingId,
+        uint256 indexed tokenId,
+        address indexed assetContract,
+        uint256 price,
+        address seller,
+        address buyer
+    );
 }
