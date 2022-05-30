@@ -24,7 +24,7 @@ describe("Marketplace", function () {
     await nft.deployed();
   });
 
-  it("Should create a new listing", async function () {
+  it("Should create a new listing and return", async function () {
     let tx = await nft.mint("jkhgkjhgkjhgj");
     await tx.wait();
 
@@ -36,11 +36,14 @@ describe("Marketplace", function () {
 
     await tx.wait();
 
-    const allListings = await marketplace.getListings();
+    const allListings = await marketplace.getAllListings();
     expect(allListings.length).to.be.equal(1);
+
+    const specificListing = await marketplace.getSpecificListing(1);
+    expect(specificListing.listingId).to.be.equal(1);
   });
 
-  it("Should transfer nft to buyer after the sale", async function () {
+  it("Should transfer nft to buyer after the sale and return nfts for owner and seller", async function () {
     let tx = await nft.connect(seller).mint("jkhgkjhgkjhgj");
     await tx.wait();
 
@@ -49,11 +52,17 @@ describe("Marketplace", function () {
       .createListing(nft.address, 1, ethers.utils.parseUnits("1", "ether"));
     await tx.wait();
 
+    const nftsCreated = await marketplace.connect(seller).getListingsCreated();
+    expect(nftsCreated.length).to.be.equal(1);
+
     tx = await marketplace
       .connect(buyer)
       .buy(1, { value: ethers.utils.parseUnits("1.03", "ether") });
 
     await tx.wait();
+
+    const myNfts = await marketplace.connect(buyer).getMyListings();
+    expect(myNfts.length).to.be.equal(1);
 
     let balance = await nft.balanceOf(buyer.address);
     expect(balance).to.be.equal(BigNumber.from(1));
