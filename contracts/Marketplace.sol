@@ -10,8 +10,8 @@ import "hardhat/console.sol";
 contract Marketplace is ReentrancyGuard {
     using SafeMath for uint256;
     using Counters for Counters.Counter;
-    Counters.Counter private _totalListings; //Starts from 1
-    Counters.Counter private _listingSold;  //Starts from 1
+    Counters.Counter private _totalListings; //Starts from 0
+    Counters.Counter private _listingSold;  //Starts from 0
     
     address payable private owner;
     address payable private _governmentAccount;
@@ -60,7 +60,7 @@ contract Marketplace is ReentrancyGuard {
     function buy(uint256 listingId) external payable nonReentrant{
         require(msg.sender != address(0), "Address should not be 0");
 
-        Listing memory listing = listings[listingId];
+        Listing storage listing = listings[listingId];
         require(listing.listingId == listingId, "Property does not exist");
         
         uint256 marketplaceCommissionCalculated = listing
@@ -77,6 +77,9 @@ contract Marketplace is ReentrancyGuard {
             .add(governmentCommissionCalculated);
 
         require(msg.value == requiredAmount, "Insufficent amount");
+
+
+        listing.owner = msg.sender;
 
         //Commissions are paid
         _governmentAccount.transfer(governmentCommissionCalculated.mul(2));
@@ -128,7 +131,7 @@ contract Marketplace is ReentrancyGuard {
         uint256 totalListingCount = _totalListings.current();
         uint256 itemCount = 0;
         uint256 index = 0;
-
+        
         for (uint256 i = 0; i < totalListingCount; i++) {
             if (listings[i + 1].owner == msg.sender) {
                 itemCount += 1;
@@ -182,7 +185,7 @@ contract Marketplace is ReentrancyGuard {
         uint256 listingId;
         uint256 price;
         address payable seller;
-        address payable owner;
+        address owner;
         address assetContract;
         uint256 tokenId;
     }
