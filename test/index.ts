@@ -2,10 +2,10 @@ import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
 import { BigNumber } from "ethers";
 import { ethers } from "hardhat";
-import { Marketplace, NFT } from "../typechain";
+import { Marketplace, PropertyNFT } from "../typechain";
 
 let marketplace: Marketplace;
-let nft: NFT;
+let nft: PropertyNFT;
 let owner: SignerWithAddress;
 let seller: SignerWithAddress;
 let buyer: SignerWithAddress;
@@ -19,8 +19,8 @@ describe("Marketplace", function () {
     )) as Marketplace;
     await marketplace.deployed();
 
-    const NFT = await ethers.getContractFactory("NFT");
-    nft = (await NFT.connect(owner).deploy(marketplace.address)) as NFT;
+    const PropertyNFT = await ethers.getContractFactory("PropertyNFT");
+    nft = (await PropertyNFT.connect(owner).deploy(marketplace.address)) as PropertyNFT;
     await nft.deployed();
   });
 
@@ -44,7 +44,10 @@ describe("Marketplace", function () {
   });
 
   it("Should transfer nft to buyer after the sale and return nfts for owner and seller", async function () {
-    let tx = await nft.connect(seller).mint("jkhgkjhgkjhgj");
+    let tx = await nft.connect(seller).mint("token1");
+    await tx.wait();
+
+    tx = await nft.connect(seller).mint("token2");
     await tx.wait();
 
     tx = await marketplace
@@ -61,8 +64,14 @@ describe("Marketplace", function () {
 
     await tx.wait();
 
-    const myNfts = await marketplace.connect(buyer).getMyListings();
-    expect(myNfts.length).to.be.equal(1);
+    tx = await marketplace
+    .connect(seller)
+    .createListing(nft.address, 2, ethers.utils.parseUnits("1", "ether"));
+  await tx.wait();
+
+    const myNfts = await marketplace.connect(buyer).getAllListings();
+    console.log(myNfts);
+/*     expect(myNfts.length).to.be.equal(1);
 
     let balance = await nft.balanceOf(buyer.address);
     expect(balance).to.be.equal(BigNumber.from(1));
@@ -71,6 +80,6 @@ describe("Marketplace", function () {
     expect(balance).to.be.equal(BigNumber.from(0));
 
     balance = await nft.balanceOf(seller.address);
-    expect(balance).to.be.equal(BigNumber.from(0));
+    expect(balance).to.be.equal(BigNumber.from(0)); */
   });
 });

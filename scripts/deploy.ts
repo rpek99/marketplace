@@ -28,7 +28,7 @@ async function main() {
   const nft = await PropertyNFT.deploy(marketplace.address);
   await nft.deployed();
 
-  console.log("NFT deployed: ", nft.address);
+  console.log("PropertyNFT deployed: ", nft.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere

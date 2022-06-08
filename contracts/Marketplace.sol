@@ -114,10 +114,9 @@ contract Marketplace is ReentrancyGuard {
     function getAllListings() external view returns (Listing[] memory) {
         uint256 unsoldListingCount = _totalListings.current() - _listingSold.current();
         Listing[] memory activeListings = new Listing[](unsoldListingCount);
-
         uint256 index = 0;
 
-        for (uint256 i = 0; i < unsoldListingCount; i++) {
+        for (uint256 i = 0; i < _totalListings.current(); i++) {
             if (listings[i + 1].owner == address(0)) {
                 activeListings[index] = listings[listings[i + 1].listingId];
                 index += 1;
